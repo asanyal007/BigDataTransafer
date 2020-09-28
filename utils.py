@@ -1,8 +1,10 @@
 from csv import reader
+import csv
 import progressbar
 import subprocess
 import psycopg2
 import pyodbc
+import pandas as pd
 def progress(btach_size):
     bar = progressbar.ProgressBar(maxval=btach_size,widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
     return bar
@@ -23,8 +25,9 @@ def generate_ddl(cur,schema,table):
     return  create_str
 
 def save_out(schema,table,cur,sep):
-    io = open(table+'.dat', 'w')
-    cur.copy_to(io, schema+'.'+table, sep=sep)
+    cols = get_columns(cur, table)
+    with open('combined_file.csv', 'w', newline='') as io:
+        cur.copy_to(io, schema+'.'+table, sep=sep)
     io.close()
 def batch_insert(table,btach_size,column_detail,odbc_conn,odbc_cur, delm):
     bar = progress(btach_size)
@@ -75,7 +78,7 @@ def get_odbc_cursor(DRIVER, Server, DATABASE, UID, PWD):
     conn_str = 'DRIVER={};Server={};DATABASE={};UID={};PWD={}'.format(DRIVER, Server, DATABASE, UID, PWD)
     print(conn_str)
     cnxn = pyodbc.connect(conn_str)
-    return cnxn
+    return cnxn, conn_str
 
 def get_columndetail(cur, table):
     column_detail_sql = """SELECT column_name,data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'{}'""".format(table)
@@ -89,3 +92,31 @@ def verify(pg_cursor,odbc_cur, source_schema, source_table, dest_schema, dest_ta
     source_count = pg_cursor.fetchall()
     dest_count = odbc_cur.fetchall()
     return source_count, dest_count
+
+def get_columns(cur, table):
+    list_str = []
+    column_detail_sql = """SELECT column_name,data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'{}'""".format(
+        table)
+    cur.execute(column_detail_sql)
+    column_detail = cur.fetchall()
+    for a in column_detail:
+        list_str.append(a[0])
+    return list_str
+
+def save_part(source_data, chunk_size, format):
+    # partition data
+    chunk_num = 0
+    name_of_table = source_data.split(",")[0]
+    part = 15857625
+    bar = progress(part)
+    bar.start()
+    offset = 0
+    for chunk in pd.read_csv("star_data.csv", chunksize=chunk_size):
+        if format == "parquet":
+            chunk.to_parquet('chunks/' + name_of_table + 'part_' + str(chunk_num) + '.parquet', compression='GZIP')
+        elif format == "csv":
+            chunk.to_csv('chunks/' + name_of_table + 'part_' + str(chunk_num) + '.csv')
+        bar.update(offset)
+        chunk_num = chunk_num + 1
+        offset = offset + chunk_size
+    bar.finish()
