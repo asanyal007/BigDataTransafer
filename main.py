@@ -17,10 +17,10 @@ dbname = "postgres"
 user= "aritra"
 password= "Nq1dRuaV"
 # source file(dump)
-csv_file = "/home/aritra/PycharmProjects/Greenplum_to_Azure/chunks/star_datapart_1.cs"
 # odbc Server Details
 DRIVER= "{ODBC Driver 17 for SQL Server}"
 Server= "gptoazure.database.windows.net"
+Port = "5432"
 DATABASE= "star"
 UID= "aritra"
 PWD= "Nq1dRuaV"
@@ -31,8 +31,13 @@ pg_conn = utils.get_psycopg_cursor(host, port, dbname, user, password )
 cur = pg_conn.cursor()
 utils.save_out('public','star_data',cur,",")'''
 
-# bcp
-utils.bcp_bulk_load("star_experiment", csv_file, Server, DATABASE, UID, PWD)
+'''# bcp
+import pandas as pd
+data = pd.read_csv("chunks/star_data_chunk_info.csv")
+files = data['File_name']
+folder = '/home/aritra/PycharmProjects/Greenplum_to_Azure/'
+for each in files:
+    utils.bcp_bulk_load("star_experiment", folder+each, Server, DATABASE, UID, PWD)'''
 
 '''# batch load
 odbc_conn = utils.get_odbc_cursor(DRIVER, Server, DATABASE, UID, PWD)
@@ -89,7 +94,21 @@ chunk_size = 1000000
 utils.save_part('star_data', chunk_size, 'csv')'''
 
 
-# to_sql
+'''# to_sql
+from sqlalchemy import event
+import sqlalchemy
+import urllib
+import pandas as pd
+conn, str = utils.get_odbc_cursor(DRIVER, Server, Port, DATABASE, UID, PWD)
+db_params = urllib.parse.quote_plus(str)
+engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(db_params))
+df = pd.read_csv("chunks/star_datapart_0.csv")
+cursor = engine.connect()
+cursor.fast_executemany = True
+df.to_sql("star_experiment",engine,index=False,if_exists="append",schema="dbo")
+'''
+
+
 
 
 
