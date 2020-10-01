@@ -31,13 +31,44 @@ pg_conn = utils.get_psycopg_cursor(host, port, dbname, user, password )
 cur = pg_conn.cursor()
 utils.save_out('public','star_data',cur,",")'''
 
+'''# partition data
+pg_conn = utils.get_psycopg_cursor(host, port, dbname, user, password )
+cur = pg_conn.cursor()
+name_of_table = "combined_file"
+chunk_size = 1000000
+utils.save_part('star_data.csv', chunk_size, 'csv')'''
+
 '''# bcp
 import pandas as pd
-data = pd.read_csv("chunks/star_data_chunk_info.csv")
-files = data['File_name']
+target = {}
+target["target_count"] = []
+target["source_file"] = []
+target["STATUS"] = []
+conn, str = utils.get_odbc_cursor(DRIVER, Server, Port, DATABASE, UID, PWD)
+cur = conn.cursor()
+data_info = pd.read_csv("chunks/star_data_chunk_info.csv")
+files = data_info['File_name']
 folder = '/home/aritra/PycharmProjects/Greenplum_to_Azure/'
+load_count = 0
 for each in files:
-    utils.bcp_bulk_load("star_experiment", folder+each, Server, DATABASE, UID, PWD)'''
+    try:
+        utils.bcp_bulk_load("star_data3", folder+each, Server, DATABASE, UID, PWD)
+    except:
+        target["STATUS"].append("FAILED")
+        exit(1)
+    cur.execute("SELECT COUNT(*) FROM dbo.star_data3")
+    target_count = cur.fetchall()
+    load_count = int(target_count[0][0]) - load_count
+    target["target_count"].append(load_count)
+    target["source_file"].append(folder+each)
+    if target_count == load_count:
+        target["STATUS"].append("SUCCESS")
+    else:
+        target["STATUS"].append("FAILED")
+    target_df = pd.DataFrame.from_dict(target, orient='index').transpose()
+    target_df.to_csv("chunks/target_info.csv")'''
+
+
 
 '''# batch load
 odbc_conn = utils.get_odbc_cursor(DRIVER, Server, DATABASE, UID, PWD)
@@ -47,6 +78,8 @@ pg_cursor = pg_conn.cursor()
 btach_size = 1000
 column_detail = utils.get_columndetail(pg_cursor, "star_data")
 utils.batch_insert("star_experiment",btach_size,column_detail,odbc_conn,odbc_cur, ',')'''
+
+
 
 
 '''# generate ddl
@@ -84,14 +117,7 @@ while True:
   chunk_num += 1
 bar.finish()'''
 
-'''# partition data
-import pandas as pd
-pg_conn = utils.get_psycopg_cursor(host, port, dbname, user, password )
-cur = pg_conn.cursor()
-#utils.save_out('public','star_data',cur,",")
-name_of_table = "star_data"
-chunk_size = 1000000
-utils.save_part('star_data', chunk_size, 'csv')'''
+
 
 
 '''# to_sql
@@ -107,6 +133,60 @@ cursor = engine.connect()
 cursor.fast_executemany = True
 df.to_sql("star_experiment",engine,index=False,if_exists="append",schema="dbo")
 '''
+import pandas as pd
+import csv
+import time
+start_time = time.time()
+conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
+'''cur = conn.cursor()'''
+format = "csv"
+name_of_table = "star_data"
+chunk_num = 0
+chunk_size = 50000000
+schema = "public"
+name_of_table = "star_data"
+'''cols = utils.get_columns(cur, name_of_table)'''
+'''source_count = utils.source_count(cur, schema, name_of_table)
+last_chunk_count = source_count[0][0] % chunk_size
+file_count = int((source_count[0][0] - last_chunk_count)/chunk_size)
+cur.close()'''
+bar = utils.progress(chunk_size)
+bar_val = 0
+bar.start()
+chunk_size_sql = 1000000
+with conn.cursor(name='custom_cursor') as cursor:
+    cursor.itersize = chunk_size_sql # chunk size
+    query = 'SELECT * FROM {}.{};'.format(schema, name_of_table )
+    cursor.execute(query)
+    rows = []
+    chunk_num=0
+    i=0
+    dict_df = {}
+    dict_df["File_name"] = []
+    dict_df["num_rows"] = []
+    csv_file = 0
+    for row in cursor:
+        #rowl = [str(a) for a in row]
+        chunk_num = chunk_num + 1
+        if chunk_num <= chunk_size:
+            if not csv_file:
+                csv_file = open('chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
+
+            writer = csv.writer(csv_file, delimiter=',')
+            writer.writerow(row)
+            #bar_val = chunk_num + bar_val
+            bar.update(chunk_num)
+
+        else:
+            print(" {} saved in {}".format(('chunks/' + name_of_table + '_part_' + str(i) + '.csv'),
+                                          (time.time() - start_time)))
+            i = i+1
+            csv_file.close()
+            csv_file = 0
+            chunk_num = 0
+bar.finish()
+
+
 
 
 
