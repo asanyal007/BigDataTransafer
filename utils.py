@@ -154,8 +154,6 @@ def source_count(cur, schema, table):
     return  count
 
 def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
-    bar = progress(chunk_size)
-    bar.start()
     start_time = time.time()
     with conn.cursor(name=name_of_table) as cursor:
         cursor.itersize = chunk_size_sql  # chunk size
@@ -167,33 +165,30 @@ def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
         chunk_num = 0
         i = 0
         dict_df = {}
-        dict_df["File_name"] = []
-        dict_df["num_rows"] = []
         csv_file = 0
+
         for row in cursor:
-            # rowl = [str(a) for a in row]
             chunk_num = chunk_num + 1
             if chunk_num <= chunk_size:
                 if not csv_file:
                     try:
                         csv_file = open('chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
+                        print(" Writing {} to file {} started at {}".format(name_of_table,
+                                                                            (name_of_table + '_part_' + str(i) + '.csv'),
+                                                                            (start_time)))
                     except:
                         return False
                 writer = csv.writer(csv_file, delimiter=',')
                 writer.writerow(row)
-                bar.update(chunk_num)
+                dict_df['chunks/' + name_of_table + '_part_' + str(i) + '.csv'] = chunk_num - 1
             else:
                 print(" {} saved in {}".format(('chunks/' + name_of_table + '_part_' + str(i) + '.csv'),
                                                (time.time() - start_time)))
-                dict_df["num_rows"].append(chunk_num)
-                dict_df["File_name"].append('chunks/' + name_of_table + '_part_' + str(i) + '.csv')
                 i = i + 1
                 csv_file.close()
                 csv_file = 0
                 chunk_num = 0
-                bar.finish()
-    bar.finish()
-    df_nfo = pd.DataFrame.from_dict(dict_df, orient='index').transpose()
+    df_nfo = pd.DataFrame.from_dict(dict_df, orient='index')
     df_nfo.to_csv("chunks/{}_info.csv".format(name_of_table))
     return True
 

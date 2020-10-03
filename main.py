@@ -192,21 +192,24 @@ import time
 import sys
 import multiprocessing
 start_time = time.time()
-conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
+#conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
 name_of_table = "star_data"
 chunk_num = 0
 chunk_size = 50000000
 schema = "public"
 name_of_table1 = "star_data"
 name_of_table2 = "star_data2"
-bar = utils.progress(chunk_size)
 bar_val = 0
-bar.start()
 chunk_size_sql = 3000000
 
-tables = utils.get_tables(conn, schema)
+#tables = utils.get_tables(conn, schema)
+tables = [name_of_table1, name_of_table2]
+connections = {}
+for tab in tables:
+    connections[tab] = utils.get_psycopg_cursor(host, port,dbname, user, password)
 proc = []
 for table in tables:
+    conn = connections[table]
     tab = multiprocessing.Process(target=utils.save_parts,
                                    args=[conn, schema, table, chunk_size_sql, chunk_size])
     tab.start()
