@@ -133,32 +133,27 @@ cursor = engine.connect()
 cursor.fast_executemany = True
 df.to_sql("star_experiment",engine,index=False,if_exists="append",schema="dbo")
 '''
-import pandas as pd
+'''import pandas as pd
 import csv
 import time
+import sys
 start_time = time.time()
-conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
+conn = utils.get_psycopg_cursor(host, port,dbname, user, password)'''
 '''cur = conn.cursor()'''
-format = "csv"
+'''format = "csv"
 name_of_table = "star_data"
 chunk_num = 0
 chunk_size = 50000000
 schema = "public"
 name_of_table = "star_data"
-'''cols = utils.get_columns(cur, name_of_table)'''
-'''source_count = utils.source_count(cur, schema, name_of_table)
-last_chunk_count = source_count[0][0] % chunk_size
-file_count = int((source_count[0][0] - last_chunk_count)/chunk_size)
-cur.close()'''
 bar = utils.progress(chunk_size)
 bar_val = 0
 bar.start()
-chunk_size_sql = 1000000
+chunk_size_sql = 3000000
 with conn.cursor(name='custom_cursor') as cursor:
     cursor.itersize = chunk_size_sql # chunk size
     query = 'SELECT * FROM {}.{};'.format(schema, name_of_table )
     cursor.execute(query)
-    rows = []
     chunk_num=0
     i=0
     dict_df = {}
@@ -171,23 +166,52 @@ with conn.cursor(name='custom_cursor') as cursor:
         if chunk_num <= chunk_size:
             if not csv_file:
                 csv_file = open('chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
-
             writer = csv.writer(csv_file, delimiter=',')
             writer.writerow(row)
-            #bar_val = chunk_num + bar_val
             bar.update(chunk_num)
-
         else:
             print(" {} saved in {}".format(('chunks/' + name_of_table + '_part_' + str(i) + '.csv'),
                                           (time.time() - start_time)))
+            dict_df["num_rows"].append(chunk_num)
+            dict_df["File_name"].append('chunks/' + name_of_table + '_part_' + str(i) + '.csv')
             i = i+1
             csv_file.close()
             csv_file = 0
             chunk_num = 0
+            bar.finish()
 bar.finish()
+df_nfo = pd.DataFrame.from_dict(dict_df,orient='index').transpose()
+df_nfo.to_csv("chunks/{}_info.csv".format(name_of_table))'''
 
 
 
+
+import pandas as pd
+import csv
+import time
+import sys
+import multiprocessing
+start_time = time.time()
+conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
+conn2 = utils.get_psycopg_cursor(host, port,dbname, user, password)
+name_of_table = "star_data"
+chunk_num = 0
+chunk_size = 50000000
+schema = "public"
+name_of_table1 = "star_data"
+name_of_table2 = "star_data2"
+bar = utils.progress(chunk_size)
+bar_val = 0
+bar.start()
+chunk_size_sql = 3000000
+
+tab1 = multiprocessing.Process(target=utils.save_parts, args=[conn, schema, name_of_table1, chunk_size_sql, chunk_size])
+tab2 = multiprocessing.Process(target=utils.save_parts, args=[conn2, schema, name_of_table2, chunk_size_sql, chunk_size])
+
+tab1.start()
+tab2.start()
+tab1.join()
+tab2.join()
 
 
 

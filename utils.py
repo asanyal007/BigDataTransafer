@@ -5,6 +5,8 @@ import subprocess
 import psycopg2
 import pyodbc
 import pandas as pd
+import time
+
 def progress(btach_size):
     bar = progressbar.ProgressBar(maxval=btach_size,widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
     return bar
@@ -26,8 +28,8 @@ def generate_ddl(cur,schema,table):
 
 def save_out(schema,table,cur,sep):
     cols = get_columns(cur, table)
-    with open('combined_file.csv', 'w', newline='') as io:
-        cur.copy_to(io, schema+'.'+table, sep=sep)
+    with open('{}.csv'.format(table), 'w', newline='') as io:
+        cur.copy_expert("COPY "+schema+'.'+table +" TO STDOUT WITH CSV HEADER", io)
     io.close()
 def batch_insert(table,btach_size,column_detail,odbc_conn,odbc_cur, delm):
     bar = progress(btach_size)
@@ -106,7 +108,7 @@ def get_columns(cur, table):
 def save_part(source_data, chunk_size, format):
     # partition data
     chunk_num = 0
-    name_of_table = source_data.split(",")[0]
+    name_of_table = source_data.split(".")[0]
     part = 15857625
     bar = progress(part)
     bar.start()
@@ -114,14 +116,14 @@ def save_part(source_data, chunk_size, format):
     dict_df = {}
     dict_df["File_name"] = []
     dict_df["num_rows"] = []
-    for chunk in pd.read_csv("star_data.csv", chunksize=chunk_size):
+    for chunk in pd.read_csv(source_data, chunksize=chunk_size):
         dict_df["File_name"].append('chunks/' + name_of_table + '_part_' + str(chunk_num) + '.'+format)
         dict_df["num_rows"].append(len(chunk.index))
 
         if format == "parquet":
             chunk.to_parquet('chunks/' + name_of_table + '_part_' + str(chunk_num) + '.parquet', compression='GZIP')
         elif format == "csv":
-            chunk.to_csv('chunks/' + name_of_table + '_part_' + str(chunk_num) + '.csv')
+            chunk.to_csv('chunks/' + name_of_table + '_part_' + str(chunk_num) + '.csv', index=False)
         bar.update(offset)
         chunk_num = chunk_num + 1
         offset = offset + chunk_size
@@ -134,6 +136,54 @@ def get_files(path, format):
     files = [f for f in glob.glob(path + "**/*.{}".format(format), recursive=True)]
     return  files
 
+def source_count(cur, schema, table):
+    sql = "SELECT COUNT(*) FROM {}.{};".format(schema, table)
+    cur.execute(sql)
+    count = cur.fetchall()
+    return  count
 
+def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
+    bar = progress(chunk_size)
+    bar.start()
+    start_time = time.time()
+    with conn.cursor(name=name_of_table) as cursor:
+        cursor.itersize = chunk_size_sql  # chunk size
+        query = 'SELECT * FROM {}.{};'.format(schema, name_of_table)
+        try:
+            cursor.execute(query)
+        except:
+            return False
+        chunk_num = 0
+        i = 0
+        dict_df = {}
+        dict_df["File_name"] = []
+        dict_df["num_rows"] = []
+        csv_file = 0
+        for row in cursor:
+            # rowl = [str(a) for a in row]
+            chunk_num = chunk_num + 1
+            if chunk_num <= chunk_size:
+                if not csv_file:
+                    try:
+                        csv_file = open('chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
+                    except:
+                        return False
+                writer = csv.writer(csv_file, delimiter=',')
+                writer.writerow(row)
+                bar.update(chunk_num)
+            else:
+                print(" {} saved in {}".format(('chunks/' + name_of_table + '_part_' + str(i) + '.csv'),
+                                               (time.time() - start_time)))
+                dict_df["num_rows"].append(chunk_num)
+                dict_df["File_name"].append('chunks/' + name_of_table + '_part_' + str(i) + '.csv')
+                i = i + 1
+                csv_file.close()
+                csv_file = 0
+                chunk_num = 0
+                bar.finish()
+    bar.finish()
+    df_nfo = pd.DataFrame.from_dict(dict_df, orient='index').transpose()
+    df_nfo.to_csv("chunks/{}_info.csv".format(name_of_table))
+    return True
 
 
