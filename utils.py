@@ -105,6 +105,17 @@ def get_columns(cur, table):
         list_str.append(a[0])
     return list_str
 
+def get_tables(conn, schema):
+    cur = conn.cursor()
+    list_str = []
+    column_detail_sql = """SELECT distinct table_name FROM INFORMATION_SCHEMA.COLUMNS where table_schema= '{}' """.format(schema)
+    cur.execute(column_detail_sql)
+    table_detail = cur.fetchall()
+    for a in table_detail:
+        list_str.append(a[0])
+    cur.close()
+    return list_str
+
 def save_part(source_data, chunk_size, format):
     # partition data
     chunk_num = 0

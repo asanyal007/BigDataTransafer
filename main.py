@@ -193,7 +193,6 @@ import sys
 import multiprocessing
 start_time = time.time()
 conn = utils.get_psycopg_cursor(host, port,dbname, user, password)
-conn2 = utils.get_psycopg_cursor(host, port,dbname, user, password)
 name_of_table = "star_data"
 chunk_num = 0
 chunk_size = 50000000
@@ -205,13 +204,15 @@ bar_val = 0
 bar.start()
 chunk_size_sql = 3000000
 
-tab1 = multiprocessing.Process(target=utils.save_parts, args=[conn, schema, name_of_table1, chunk_size_sql, chunk_size])
-tab2 = multiprocessing.Process(target=utils.save_parts, args=[conn2, schema, name_of_table2, chunk_size_sql, chunk_size])
-
-tab1.start()
-tab2.start()
-tab1.join()
-tab2.join()
+tables = utils.get_tables(conn, schema)
+proc = []
+for table in tables:
+    tab = multiprocessing.Process(target=utils.save_parts,
+                                   args=[conn, schema, table, chunk_size_sql, chunk_size])
+    tab.start()
+    proc.append(tab)
+for process in proc:
+    process.join()
 
 
 
