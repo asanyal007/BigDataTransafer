@@ -217,6 +217,8 @@ for table in tables:
 for process in proc:
     process.join()
 
+#utils.load_blob()
+
 
 
 

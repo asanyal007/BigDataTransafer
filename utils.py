@@ -6,6 +6,8 @@ import psycopg2
 import pyodbc
 import pandas as pd
 import time
+import os, uuid
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, __version__
 
 def progress(btach_size):
     bar = progressbar.ProgressBar(maxval=btach_size,widgets=[progressbar.Bar('=', '[', ']'), ' ', progressbar.Percentage()])
@@ -172,7 +174,7 @@ def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
             if chunk_num <= chunk_size:
                 if not csv_file:
                     try:
-                        csv_file = open('chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
+                        csv_file = open('/media/aritra/Acer/chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
                         print(" Writing {} to file {} started at {}".format(name_of_table,
                                                                             (name_of_table + '_part_' + str(i) + '.csv'),
                                                                             (start_time)))
@@ -180,16 +182,35 @@ def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
                         return False
                 writer = csv.writer(csv_file, delimiter=',')
                 writer.writerow(row)
-                dict_df['chunks/' + name_of_table + '_part_' + str(i) + '.csv'] = chunk_num - 1
+                dict_df['/media/aritra/Acer/chunks/' + name_of_table +"_"+ str(uuid.uuid4()) +'_part_' + str(i) + '.csv'] = chunk_num
             else:
-                print(" {} saved in {}".format(('chunks/' + name_of_table + '_part_' + str(i) + '.csv'),
-                                               (time.time() - start_time)))
+                print(" {} saved in {}".format(('/media/aritra/Acer/chunks/' + name_of_table  +"_"+ str(uuid.uuid4()) + '_part_' + str(i) + '.csv'),
+                                               (time.time() - start_time)/60))
                 i = i + 1
                 csv_file.close()
                 csv_file = 0
                 chunk_num = 0
     df_nfo = pd.DataFrame.from_dict(dict_df, orient='index')
-    df_nfo.to_csv("chunks/{}_info.csv".format(name_of_table))
+    df_nfo.to_csv("/media/aritra/Acer/chunks/{}_info.csv".format(name_of_table))
     return True
 
+def load_blob(connect_str, local_path, local_file_name, container_name, create ):
 
+    # connect_str = "DefaultEndpointsProtocol=https;AccountName=csg10032000e5d76b3c;AccountKey=C0kFvA+oG51m23rJZK8C0f2Kpkm/+iS1nrwOYgd3W0OnphZLw9CG1Jh5kR0ptG8NeEcyCqY4YnkEHwGEZDTdOw==;EndpointSuffix=core.windows.net"
+    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+
+    # create container if create set to true
+    if create:
+        container_client = blob_service_client.create_container(container_name)
+
+    # Create a file in local data directory to upload and download
+    upload_file_path = os.path.join(local_path, local_file_name)
+
+    # Create a blob client using the local file name as the name for the blob
+    blob_client = blob_service_client.get_blob_client(container=container_name, blob=local_file_name)
+
+    print("\nUploading to Azure Storage as blob:\n\t" + local_file_name)
+
+    # Upload the created file
+    with open(upload_file_path, "rb") as data:
+        blob_client.upload_blob(data)
