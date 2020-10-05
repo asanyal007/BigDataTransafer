@@ -173,8 +173,9 @@ def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
             chunk_num = chunk_num + 1
             if chunk_num <= chunk_size:
                 if not csv_file:
+                    name_of_file ='/media/aritra/Acer/chunks/{}_{}_part_{}.csv'.format(name_of_table,str(uuid.uuid4()), str(i) )
                     try:
-                        csv_file = open('/media/aritra/Acer/chunks/' + name_of_table + '_part_' + str(i) + '.csv', 'a')
+                        csv_file = open(name_of_file, 'a')
                         print(" Writing {} to file {} started at {}".format(name_of_table,
                                                                             (name_of_table + '_part_' + str(i) + '.csv'),
                                                                             (start_time)))
@@ -182,9 +183,9 @@ def save_parts(conn, schema, name_of_table, chunk_size_sql, chunk_size):
                         return False
                 writer = csv.writer(csv_file, delimiter=',')
                 writer.writerow(row)
-                dict_df['/media/aritra/Acer/chunks/' + name_of_table +"_"+ str(uuid.uuid4()) +'_part_' + str(i) + '.csv'] = chunk_num
+                dict_df[name_of_file] = chunk_num
             else:
-                print(" {} saved in {}".format(('/media/aritra/Acer/chunks/' + name_of_table  +"_"+ str(uuid.uuid4()) + '_part_' + str(i) + '.csv'),
+                print(" {} saved in {}".format(name_of_file,
                                                (time.time() - start_time)/60))
                 i = i + 1
                 csv_file.close()
